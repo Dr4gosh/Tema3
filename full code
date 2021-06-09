@@ -1,0 +1,102 @@
+import sqlite3
+from flask import Flask, request, jsonify
+from sqlite3 import Error
+
+app = Flask(__name__)
+
+
+def db_connection():
+    conn = None
+    try:
+        conn = sqlite3.connect("db2.db")
+    except sqlite3.error as e:
+        print(e)
+    return conn
+
+
+@app.route("/users", methods=["GET", "POST", "DELETE"])
+def users():
+        conn = db_connection()
+        cursor = conn.cursor()
+
+        if request.method == "GET":
+            cursor = conn.execute("SELECT * FROM Users")
+            users = [
+                dict(id=row[0], usern=row[1], name=row[2], mail=row[3], psw=row[4])
+                for row in cursor.fetchall()
+            ]
+            if users is not None:
+                return jsonify(users)
+
+        elif request.method == "DELETE":
+            sql = """ DELETE FROM Users"""
+            conn.execute(sql)
+            conn.commit()
+            return "The table has been deleted", 200
+        else:
+            try:
+                new_usern = request.form.get("usern")
+                new_name = request.form.get("name")
+                new_email = request.form.get("email")
+                new_psw = request.form.get("psw")
+
+                sql = """INSERT INTO Users
+                        (usern, name, email, psw)
+                    VALUES (?, ?, ?, ?);"""
+
+
+                cursor.execute(sql, (new_usern, new_name, new_email, new_psw))
+                conn.commit()
+                return f"User with the id: {cursor.lastrowid} created succesfully"
+            except sqlite3.Error as e:
+                print("Error while inserting data", e)
+
+
+@app.route("/users/<int:id>", methods=["GET","POST", "PUT", "DELETE"])
+def single_user(id):
+    conn = db_connection()
+    cursor = conn.cursor()
+    user = None
+    if request.method == "GET":
+        cursor.execute("SELECT * FROM Users WHERE id=?", (id,))
+        rows = cursor.fetchall()
+        for r in rows:
+            user = r
+        if user is not None:
+            return jsonify(user), 200
+        else:
+            return "Something wrong", 404
+    if request.method == "PUT":
+        sql = """UPDATE Users
+                SET usern=?,
+                name=?,
+                email=?,
+                psw=?
+                WHERE id=? """
+
+        usern = request.form.get("usern")
+        name = request.form.get("name")
+        email = request.form.get("email")
+        psw = request.form.get("psw")
+
+        updated_user = {
+            "id": id,
+            "usern": usern,
+            "name": name,
+            "email": email,
+            "psw" : psw,
+        }
+
+        conn.execute(sql, (usern, name, email, psw, id))
+        conn.commit()
+        return jsonify(updated_user)
+
+    if request.method == "DELETE":
+        sql = """ DELETE FROM Users WHERE id=? """
+        conn.execute(sql, (id,))
+        conn.commit()
+        return "The user with id: {} has been deleted.".format(id), 200
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
